@@ -1,13 +1,14 @@
 import { create } from 'zustand';
-import { SaleRecord, SkuMaster, FileType, StoredFile } from './types';
-import { parseExcel, processHistory2025, processReport2026, processSkuMaster } from './utils/dataProcessor';
+import { SaleRecord, SkuMaster, FileType, StoredFile, InventoryRecord } from './types';
+import { parseExcel, processHistory2025, processReport2026, processSkuMaster, processInventory } from './utils/dataProcessor';
 import { saveFileWithRecords, getAllData, deleteFile as dbDeleteFile } from './utils/db';
 
 interface AppState {
   storedFiles: StoredFile[];
   unifiedData: SaleRecord[];
+  inventoryData: InventoryRecord[];
   isLoading: boolean;
-  
+
   // Actions
   uploadFile: (file: File, type: FileType) => Promise<void>;
   deleteFile: (fileId: string) => Promise<void>;
@@ -17,13 +18,14 @@ interface AppState {
 export const useStore = create<AppState>((set, get) => ({
   storedFiles: [],
   unifiedData: [],
+  inventoryData: [],
   isLoading: true,
 
   loadInitialData: async () => {
     set({ isLoading: true });
     try {
-      const { files, records, skus } = await getAllData();
-      
+      const { files, records, skus, inventory } = await getAllData();
+
       // Create SKU Map for quick lookup
       const skuMap = new Map<string, string>();
       skus.forEach(s => skuMap.set(s.sku, s.group));
@@ -39,7 +41,7 @@ export const useStore = create<AppState>((set, get) => ({
         return record;
       });
 
-      set({ storedFiles: files, unifiedData: consolidated, isLoading: false });
+      set({ storedFiles: files, unifiedData: consolidated, inventoryData: inventory, isLoading: false });
     } catch (e) {
       console.error("Error loading DB", e);
       set({ isLoading: false });
@@ -52,9 +54,10 @@ export const useStore = create<AppState>((set, get) => ({
       const rawData = await parseExcel(file);
       const fileId = crypto.randomUUID();
       const now = Date.now();
-      
+
       let records: SaleRecord[] = [];
       let skus: SkuMaster[] = [];
+      let inventory: InventoryRecord[] = [];
       let rowCount = 0;
 
       if (type === 'history2025') {
@@ -66,6 +69,9 @@ export const useStore = create<AppState>((set, get) => ({
       } else if (type === 'skuMaster') {
         skus = processSkuMaster(rawData);
         rowCount = skus.length;
+      } else if (type === 'inventory') {
+        inventory = processInventory(rawData, fileId);
+        rowCount = inventory.length;
       }
 
       const newFile: StoredFile = {
@@ -77,7 +83,7 @@ export const useStore = create<AppState>((set, get) => ({
       };
 
       // Persist to IndexedDB
-      await saveFileWithRecords(newFile, records, skus);
+      await saveFileWithRecords(newFile, records, skus, inventory);
 
       // Reload everything to ensure consistency (and re-apply SKU map to existing records)
       await get().loadInitialData();

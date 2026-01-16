@@ -34,4 +34,14 @@ export interface ProcessingStats {
   missingSkus: number;
 }
 
-export type FileType = 'history2025' | 'report2026' | 'skuMaster';
+export interface InventoryRecord {
+  id: string;
+  fileId: string;
+  sku: string;
+  description: string;
+  quantity: number;
+  store: string;
+  date: string;
+}
+
+export type FileType = 'history2025' | 'report2026' | 'skuMaster' | 'inventory';

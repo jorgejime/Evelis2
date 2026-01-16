@@ -46,8 +46,9 @@ const FileList = ({ files, onDelete }: { files: StoredFile[], onDelete: (id: str
           <div key={file.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-sm">
             <div className="flex items-center gap-3 overflow-hidden">
                 <div className={`w-2 h-10 rounded-full ${
-                    file.type === 'history2025' ? 'bg-blue-500' : 
-                    file.type === 'report2026' ? 'bg-green-500' : 'bg-orange-500'
+                    file.type === 'history2025' ? 'bg-blue-500' :
+                    file.type === 'report2026' ? 'bg-green-500' :
+                    file.type === 'skuMaster' ? 'bg-orange-500' : 'bg-rose-500'
                 }`}></div>
                 <div className="min-w-0">
                     <p className="font-medium text-slate-800 text-sm truncate">{file.name}</p>
@@ -58,7 +59,9 @@ const FileList = ({ files, onDelete }: { files: StoredFile[], onDelete: (id: str
                         </span>
                         <span>{file.rowCount.toLocaleString()} filas</span>
                         <span className="bg-slate-100 px-2 rounded text-slate-600 uppercase text-[10px] tracking-wide font-bold py-0.5">
-                            {file.type === 'history2025' ? 'Histórico 25' : file.type === 'report2026' ? 'Reporte 26' : 'Maestro SKU'}
+                            {file.type === 'history2025' ? 'Histórico 25' :
+                             file.type === 'report2026' ? 'Reporte 26' :
+                             file.type === 'skuMaster' ? 'Maestro SKU' : 'Inventario'}
                         </span>
                     </div>
                 </div>
@@ -99,24 +102,30 @@ export const FileUpload = () => {
         {isLoading && <span className="text-xs font-bold text-blue-600 animate-pulse bg-blue-50 px-3 py-1 rounded-full border border-blue-100">Procesando...</span>}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <UploadZone 
-          title="Agregar Histórico 2025" 
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <UploadZone
+          title="Agregar Histórico 2025"
           subtitle="Formato Simple (.xlsx)"
           onUpload={handleUpload('history2025')}
           colorClass="border-blue-200 bg-blue-50 hover:border-blue-400"
         />
-        <UploadZone 
-          title="Agregar Reporte 2026" 
+        <UploadZone
+          title="Agregar Reporte 2026"
           subtitle="Reporte Sodimac (.xlsx)"
           onUpload={handleUpload('report2026')}
           colorClass="border-green-200 bg-green-50 hover:border-green-400"
         />
-        <UploadZone 
-          title="Actualizar Maestro SKUs" 
+        <UploadZone
+          title="Actualizar Maestro SKUs"
           subtitle="Catálogo de Productos"
           onUpload={handleUpload('skuMaster')}
           colorClass="border-orange-200 bg-orange-50 hover:border-orange-400"
+        />
+        <UploadZone
+          title="Agregar Inventario"
+          subtitle="Stock por Tienda (.xlsx)"
+          onUpload={handleUpload('inventory')}
+          colorClass="border-rose-200 bg-rose-50 hover:border-rose-400"
         />
       </div>
 

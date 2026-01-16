@@ -1,5 +1,5 @@
 import { read, utils } from 'xlsx';
-import { SaleRecord, SkuMaster } from '../types';
+import { SaleRecord, SkuMaster, InventoryRecord } from '../types';
 
 // Helper to convert Excel serial date to YYYY-MM-DD
 const parseExcelDate = (value: any): string => {
@@ -128,18 +128,18 @@ export const processReport2026 = (data: any[], fileId: string): SaleRecord[] => 
 };
 
 export const processSkuMaster = (data: any[]): SkuMaster[] => {
-  const headerIndex = data.findIndex(row => 
+  const headerIndex = data.findIndex(row =>
     row.some((cell: any) => {
       const s = safeStr(cell).toLowerCase();
       return s.includes('sku') || s.includes('item');
     })
   );
-  
+
   if (headerIndex === -1) return [];
 
   const headers = data[headerIndex].map((h: any) => safeStr(h).toLowerCase());
   const rows = data.slice(headerIndex + 1);
-  
+
   const idxSku = headers.findIndex((h: string) => h.includes('sku') || h.includes('item') || h.includes('codigo'));
   const idxDesc = headers.findIndex((h: string) => h.includes('descripcion'));
   const idxGroup = headers.findIndex((h: string) => h.includes('grupo') || h.includes('categoria'));
@@ -149,4 +149,38 @@ export const processSkuMaster = (data: any[]): SkuMaster[] => {
     description: safeStr(row[idxDesc]),
     group: safeStr(row[idxGroup])
   })).filter(item => item.sku);
+};
+
+export const processInventory = (data: any[], fileId: string): InventoryRecord[] => {
+  const headerIndex = data.findIndex(row =>
+    row.some((cell: any) => {
+      const s = safeStr(cell).toLowerCase();
+      return s.includes('sku') || s.includes('codigo') || s.includes('descripcion');
+    })
+  );
+
+  if (headerIndex === -1) return [];
+
+  const headers = data[headerIndex].map((h: any) => safeStr(h).toLowerCase());
+  const rows = data.slice(headerIndex + 1);
+
+  const idxSku = headers.findIndex((h: string) => h.includes('sku') || h.includes('codigo'));
+  const idxDesc = headers.findIndex((h: string) => h.includes('descripcion') || h.includes('producto'));
+  const idxQty = headers.findIndex((h: string) => h.includes('cantidad') || h.includes('stock'));
+  const idxStore = headers.findIndex((h: string) => h.includes('tienda') || h.includes('sucursal') || h.includes('local'));
+  const idxDate = headers.findIndex((h: string) => h.includes('fecha'));
+
+  return rows.map((row, index) => {
+    if (!row[idxSku]) return null;
+
+    return {
+      id: `${fileId}-${index}`,
+      fileId: fileId,
+      sku: safeStr(row[idxSku]),
+      description: safeStr(row[idxDesc]) || 'Sin descripción',
+      quantity: parseInt(row[idxQty]) || 0,
+      store: cleanStoreName(row[idxStore]) || 'Sin asignar',
+      date: parseExcelDate(row[idxDate]) || new Date().toISOString().split('T')[0]
+    };
+  }).filter(Boolean) as InventoryRecord[];
 };

@@ -1,5 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { SaleRecord, SkuMaster, StoredFile, FileType } from '../types';
+import { SaleRecord, SkuMaster, StoredFile, FileType, InventoryRecord } from '../types';
 
 interface SalesDB extends DBSchema {
   files: {
@@ -15,10 +15,15 @@ interface SalesDB extends DBSchema {
     key: string; // sku code
     value: SkuMaster;
   };
+  inventory: {
+    key: string;
+    value: InventoryRecord;
+    indexes: { 'by-file': string };
+  };
 }
 
 const DB_NAME = 'sales-bi-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const initDB = async () => {
   return openDB<SalesDB>(DB_NAME, DB_VERSION, {
@@ -36,18 +41,24 @@ export const initDB = async () => {
       if (!db.objectStoreNames.contains('skus')) {
         db.createObjectStore('skus', { keyPath: 'sku' });
       }
+      // Store for Inventory Records
+      if (!db.objectStoreNames.contains('inventory')) {
+        const store = db.createObjectStore('inventory', { keyPath: 'id' });
+        store.createIndex('by-file', 'fileId');
+      }
     },
   });
 };
 
 export const saveFileWithRecords = async (
-  fileMeta: StoredFile, 
-  records: SaleRecord[], 
-  skus: SkuMaster[] = []
+  fileMeta: StoredFile,
+  records: SaleRecord[] = [],
+  skus: SkuMaster[] = [],
+  inventory: InventoryRecord[] = []
 ) => {
   const db = await initDB();
-  const tx = db.transaction(['files', 'records', 'skus'], 'readwrite');
-  
+  const tx = db.transaction(['files', 'records', 'skus', 'inventory'], 'readwrite');
+
   // Save metadata
   await tx.objectStore('files').put(fileMeta);
 
@@ -67,36 +78,47 @@ export const saveFileWithRecords = async (
     }
   }
 
+  // Save inventory
+  if (inventory.length > 0) {
+    const inventoryStore = tx.objectStore('inventory');
+    for (const item of inventory) {
+      await inventoryStore.put(item);
+    }
+  }
+
   await tx.done;
 };
 
 export const deleteFile = async (fileId: string) => {
   const db = await initDB();
-  const tx = db.transaction(['files', 'records', 'skus'], 'readwrite');
-  
+  const tx = db.transaction(['files', 'records', 'skus', 'inventory'], 'readwrite');
+
   // 1. Get file meta to check type
   const file = await tx.objectStore('files').get(fileId);
-  
+
   // 2. Delete from files store
   await tx.objectStore('files').delete(fileId);
 
   // 3. Delete associated records
   const recordStore = tx.objectStore('records');
-  const index = recordStore.index('by-file');
-  
-  // Iterate and delete keys (cursor is more efficient for bulk delete but getAllKeys + loop is simpler to write)
-  const keys = await index.getAllKeys(fileId);
-  for (const key of keys) {
+  const recordIndex = recordStore.index('by-file');
+
+  const recordKeys = await recordIndex.getAllKeys(fileId);
+  for (const key of recordKeys) {
     await recordStore.delete(key);
   }
 
-  // 4. If it was an SKU file, we ideally should clear SKUs linked to this file. 
-  // However, since SKUs are unique by code and might be merged, detailed cleanup is complex.
-  // For this MVP, if type is skuMaster, we assume we might want to clear ALL skus or handle it differently.
-  // Let's implement a simple clear for SKUs if the file type matches.
+  // 4. Delete associated inventory
+  const inventoryStore = tx.objectStore('inventory');
+  const inventoryIndex = inventoryStore.index('by-file');
+
+  const inventoryKeys = await inventoryIndex.getAllKeys(fileId);
+  for (const key of inventoryKeys) {
+    await inventoryStore.delete(key);
+  }
+
+  // 5. If it was an SKU file, clear all SKUs
   if (file?.type === 'skuMaster') {
-     // NOTE: This clears ALL SKUs. In a real ERP, we'd track source_file_id per SKU.
-     // For this requirement "allow delete", clearing all masters is safer than leaving stale ones.
      await tx.objectStore('skus').clear();
   }
 
@@ -109,5 +131,6 @@ export const getAllData = async () => {
     files: await db.getAll('files'),
     records: await db.getAll('records'),
     skus: await db.getAll('skus'),
+    inventory: await db.getAll('inventory'),
   };
 };
