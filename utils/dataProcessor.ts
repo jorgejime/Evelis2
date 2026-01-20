@@ -79,10 +79,10 @@ export const processHistory2025 = (data: any[], fileId: string): SaleRecord[] =>
 };
 
 export const processReport2026 = (data: any[], fileId: string): SaleRecord[] => {
-  const headerIndex = data.findIndex(row => 
+  const headerIndex = data.findIndex(row =>
     row.some((cell: any) => {
       const s = safeStr(cell).toLowerCase();
-      return s.includes('fecha final') || s.includes('ean') || (s.includes('descripción') && row.length > 5);
+      return s.includes('fecha final') || s.includes('ean') || s.includes('cantidad vendida');
     })
   );
 
@@ -91,18 +91,19 @@ export const processReport2026 = (data: any[], fileId: string): SaleRecord[] => 
   const headers = data[headerIndex].map((h: any) => safeStr(h).toLowerCase());
   const rows = data.slice(headerIndex + 1);
 
-  const idxDate = headers.findIndex((h: string) => h.includes('fecha final') || h.includes('fecha'));
-  const idxStore = 1; 
-  const idxProduct = headers.findIndex((h: string) => h.includes('descripción del ítem') || h.includes('descripcion del item') || h.includes('artículo'));
-  const idxQty = headers.findIndex((h: string) => h.includes('cantidad vendida') || h.includes('unidades'));
-  const idxSku = headers.findIndex((h: string) => h.includes('código de ítem') || h.includes('sku') || h.includes('comprador'));
-  const idxRevenue = headers.findIndex((h: string) => h.includes('precio neto') || h.includes('venta neta') || h.includes('revenue'));
+  const idxDate = headers.findIndex((h: string) => h.includes('fecha final'));
+  const idxStore = headers.findIndex((h: string) => h.includes('descripción') && !h.includes('ítem'));
+  const idxProduct = headers.findIndex((h: string) => h.includes('descripción del ítem') || h.includes('descripcion del item'));
+  const idxQty = headers.findIndex((h: string) => h.includes('cantidad vendida'));
+  const idxSku = headers.findIndex((h: string) => h.includes('código de ítem') && h.includes('comprador'));
+  const idxRevenue = headers.findIndex((h: string) => h.includes('precio neto al consumidor sin impuestos'));
 
   return rows.map((row, index) => {
-    if (!row[idxDate] && !row[idxSku]) return null;
+    if (!row[idxDate] && !row[idxQty]) return null;
 
     const sku = safeStr(row[idxSku]);
-    
+    const storeIndex = idxStore !== -1 ? idxStore : 1;
+
     let revRaw = row[idxRevenue];
     let revenue = 0;
     if (typeof revRaw === 'string') {
@@ -116,12 +117,12 @@ export const processReport2026 = (data: any[], fileId: string): SaleRecord[] => 
       id: `${fileId}-${index}`,
       fileId: fileId,
       date: parseExcelDate(row[idxDate]),
-      store: cleanStoreName(row[idxStore]),
+      store: cleanStoreName(row[storeIndex]),
       product: safeStr(row[idxProduct]) || 'Desconocido',
       quantity: parseInt(row[idxQty]) || 0,
       sku: sku,
       revenue: revenue,
-      category: 'Pendiente', // Will be enriched in the Store using DB SKUs
+      category: 'Pendiente',
       source: '2026'
     };
   }).filter(Boolean) as SaleRecord[];
