@@ -86,25 +86,50 @@ export const processReport2026 = (data: any[], fileId: string): SaleRecord[] => 
     })
   );
 
-  if (headerIndex === -1) return [];
+  if (headerIndex === -1) {
+    console.error('No se encontró el encabezado en el archivo 2026');
+    return [];
+  }
 
   const headers = data[headerIndex].map((h: any) => safeStr(h).toLowerCase());
+  console.log('Headers encontrados 2026:', headers);
+
   const rows = data.slice(headerIndex + 1);
 
+  const idxEan = headers.findIndex((h: string) => h.includes('ean'));
+  const idxStore = headers.findIndex((h: string) => h.includes('descripción') && !h.includes('ítem') && !h.includes('ean'));
   const idxDate = headers.findIndex((h: string) => h.includes('fecha final'));
-  const idxStore = headers.findIndex((h: string) => h.includes('descripción') && !h.includes('ítem'));
-  const idxProduct = headers.findIndex((h: string) => h.includes('descripción del ítem') || h.includes('descripcion del item'));
+  const idxProduct = headers.findIndex((h: string) => h.includes('descripción del ítem'));
   const idxQty = headers.findIndex((h: string) => h.includes('cantidad vendida'));
-  const idxSku = headers.findIndex((h: string) => h.includes('código de ítem') && h.includes('comprador'));
+  const idxSku = headers.findIndex((h: string) => h.includes('código') && h.includes('comprador'));
   const idxRevenue = headers.findIndex((h: string) => h.includes('precio neto al consumidor sin impuestos'));
 
-  return rows.map((row, index) => {
-    if (!row[idxDate] && !row[idxQty]) return null;
+  console.log('Índices encontrados:', {
+    idxEan,
+    idxStore,
+    idxDate,
+    idxProduct,
+    idxQty,
+    idxSku,
+    idxRevenue
+  });
 
-    const sku = safeStr(row[idxSku]);
+  if (idxQty === -1) {
+    console.error('No se encontró la columna de Cantidad Vendida');
+    return [];
+  }
+
+  const results = rows.map((row, index) => {
+    if (!row || row.length === 0) return null;
+
+    const qtyValue = row[idxQty];
+    if (!qtyValue || qtyValue === 0) return null;
+
+    const sku = idxSku !== -1 ? safeStr(row[idxSku]) : '';
     const storeIndex = idxStore !== -1 ? idxStore : 1;
+    const dateValue = idxDate !== -1 ? row[idxDate] : '';
 
-    let revRaw = row[idxRevenue];
+    let revRaw = idxRevenue !== -1 ? row[idxRevenue] : 0;
     let revenue = 0;
     if (typeof revRaw === 'string') {
         revRaw = revRaw.replace(/[$,]/g, '');
@@ -113,19 +138,24 @@ export const processReport2026 = (data: any[], fileId: string): SaleRecord[] => 
         revenue = revRaw;
     }
 
+    const productName = idxProduct !== -1 ? safeStr(row[idxProduct]) : 'Desconocido';
+
     return {
       id: `${fileId}-${index}`,
       fileId: fileId,
-      date: parseExcelDate(row[idxDate]),
+      date: parseExcelDate(dateValue),
       store: cleanStoreName(row[storeIndex]),
-      product: safeStr(row[idxProduct]) || 'Desconocido',
-      quantity: parseInt(row[idxQty]) || 0,
+      product: productName,
+      quantity: parseInt(qtyValue) || 0,
       sku: sku,
       revenue: revenue,
       category: 'Pendiente',
       source: '2026'
     };
   }).filter(Boolean) as SaleRecord[];
+
+  console.log(`Procesados ${results.length} registros de 2026`);
+  return results;
 };
 
 export const processSkuMaster = (data: any[]): SkuMaster[] => {
